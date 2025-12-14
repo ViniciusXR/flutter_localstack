@@ -5,7 +5,9 @@ import '../services/database_service.dart';
 import '../services/camera_service.dart';
 import '../services/location_service.dart';
 import '../services/sync_service.dart';
+import '../services/cloud_service.dart';
 import '../widgets/location_picker.dart';
+import 'package:uuid/uuid.dart';
 
 class TaskFormScreen extends StatefulWidget {
   final Task? task;
@@ -24,6 +26,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   String _priority = 'medium';
   bool _completed = false;
   bool _isLoading = false;
+  
+  // Escolha de destino: 'sqlite' ou 'localstack'
+  String _saveDestination = 'sqlite';
   
   // MÚLTIPLAS FOTOS
   List<String> _photoPaths = [];
@@ -139,6 +144,28 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     setState(() => _isLoading = true);
 
     try {
+      if (_saveDestination == 'localstack') {
+        // SALVAR NO LOCALSTACK
+        await _saveToLocalStack();
+      } else {
+        // SALVAR NO SQLITE (comportamento original)
+        await _saveToSQLite();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao salvar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveToSQLite() async {
+    try {
       if (widget.task == null) {
         // CRIAR
         final newTask = Task(
@@ -163,7 +190,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✓ Tarefa criada e aguardando sincronização'),
+              content: Text('✓ Tarefa criada no SQLite'),
               backgroundColor: Colors.green,
             ),
           );
@@ -192,7 +219,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✓ Tarefa atualizada e aguardando sincronização'),
+              content: Text('✓ Tarefa atualizada no SQLite'),
               backgroundColor: Colors.blue,
             ),
           );
@@ -210,6 +237,50 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _saveToLocalStack() async {
+    try {
+      // Usar a primeira foto se houver
+      String? imageBase64;
+      if (_photoPaths.isNotEmpty) {
+        final file = File(_photoPaths.first);
+        imageBase64 = await CloudService.fileToBase64(file);
+      }
+
+      final taskId = const Uuid().v4();
+      
+      // Criar mapa de localização se houver coordenadas
+      Map<String, double>? locationMap;
+      if (_latitude != null && _longitude != null) {
+        locationMap = {
+          'latitude': _latitude!,
+          'longitude': _longitude!,
+        };
+      }
+
+      final result = await CloudService.saveTask(
+        id: taskId,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        imageBase64: imageBase64,
+        location: locationMap,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ ${result['message']}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      rethrow;
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -293,6 +364,68 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                         if (value != null) setState(() => _priority = value);
                       },
                     ),
+                    
+                    const SizedBox(height: 16),
+                    
+                    // DESTINO (apenas ao criar nova tarefa)
+                    if (!isEditing)
+                      Card(
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.storage, color: Colors.blue, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Onde salvar?',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: RadioListTile<String>(
+                                      title: const Text('📱 SQLite'),
+                                      subtitle: const Text('Local'),
+                                      value: 'sqlite',
+                                      groupValue: _saveDestination,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setState(() => _saveDestination = value);
+                                        }
+                                      },
+                                      activeColor: Colors.blue,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: RadioListTile<String>(
+                                      title: const Text('☁️ LocalStack'),
+                                      subtitle: const Text('Nuvem'),
+                                      value: 'localstack',
+                                      groupValue: _saveDestination,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setState(() => _saveDestination = value);
+                                        }
+                                      },
+                                      activeColor: Colors.orange,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     
                     const SizedBox(height: 24),
                     
