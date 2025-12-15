@@ -253,7 +253,7 @@ docker exec localstack-main awslocal s3 ls s3://shopping-images --recursive
 # Listar tabelas DynamoDB
 docker exec localstack-main awslocal dynamodb list-tables
 
-# Escanear dados da tabela
+# Escanear dados da tabela (Importante!)
 docker exec localstack-main awslocal dynamodb scan --table-name ShoppingTasks
 
 # Listar filas SQS
