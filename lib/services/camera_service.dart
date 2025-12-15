@@ -147,8 +147,13 @@ class CameraService {
         ),
       );
 
+      // Aguardar um pouco antes de descartar para evitar erro de "Disposed CameraController"
+      await Future.delayed(const Duration(milliseconds: 100));
+      
       // Descartar controller APÓS o Navigator retornar
-      controller.dispose();
+      if (controller.value.isInitialized) {
+        controller.dispose();
+      }
       
       return imagePath;
     } catch (e) {
